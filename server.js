@@ -1,3 +1,5 @@
+// backend/server.js
+
 // Import required packages
 const express = require('express');
 const dotenv = require('dotenv');
@@ -13,17 +15,38 @@ connectDB();
 // Initialize Express app
 const app = express();
 
-// Middleware
-// Enable CORS for frontend communication
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000', // Allow frontend origin
-  credentials: true, // Allow cookies
-}));
+/*
+  CORS configuration
+  - Allows your Netlify site in production via FRONTEND_URL
+  - Allows localhost:3000 during local development
+  - Handles OPTIONS preflight and custom headers (x-admin-password)
+*/
+const allowedOrigins = [
+  process.env.FRONTEND_URL,       // e.g. https://your-site.netlify.app
+  'http://localhost:3000',        // local React dev
+].filter(Boolean);
 
-// Parse JSON request bodies
+// Using cors package with dynamic origin checking
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl/Postman) and allowed origins
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'x-admin-password'],
+  optionsSuccessStatus: 200, // For legacy browsers
+};
+
+// Apply CORS and ensure preflight is handled
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+// Body parsers
 app.use(express.json());
-
-// Parse URL-encoded request bodies
 app.use(express.urlencoded({ extended: true }));
 
 // Import route handlers
@@ -56,7 +79,7 @@ app.use((req, res) => {
 
 // Global error handler
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error('Global error:', err);
   res.status(500).json({
     success: false,
     message: 'Something went wrong on the server',
@@ -71,4 +94,9 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📍 http://localhost:${PORT}`);
+  if (allowedOrigins.length) {
+    console.log('✅ CORS allowed origins:', allowedOrigins.join(', '));
+  } else {
+    console.log('⚠️ No CORS origins configured. Set FRONTEND_URL in env.');
+  }
 });
